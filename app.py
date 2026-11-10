@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-from financial_data import get_financial_data
+from financial_data import get_financial_data, COMPANIES
 
 from financial_analysis import generate_financial_analysis
 
@@ -16,18 +16,45 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📊 FinSight AI")
-st.write("Your AI-powered financial analysis platform")
 
+st.title("📊 FinSight AI")
+
+st.markdown(
+    """
+    **AI-Powered Financial Statement Analysis**
+
+    Analyze publicly traded companies using financial
+    statements from the U.S. Securities and Exchange
+    Commission (SEC).
+
+    Explore revenue trends, profitability, financial
+    ratios, and AI-generated insights.
+    """
+)
+
+st.caption(
+    "Data Source: SEC EDGAR | "
+    "AI Analysis: Google Gemini | "
+    "Built with Python & Streamlit"
+)
+
+st.divider()
+
+
+# Select company
+selected_company = st.selectbox(
+    "Select Company",
+    list(COMPANIES.keys())
+)
 
 # Retrieve real SEC financial statements
 @st.cache_data(ttl=3600)
-def load_data():
-    return get_financial_data()
+def load_data(company):
+    return get_financial_data(company)
 
 
 try:
-    company_name, df, accession = load_data()
+    company_name, df, accession = load_data(selected_company)
 
 except Exception as error:
     st.error("Unable to retrieve SEC financial data.")
@@ -75,23 +102,50 @@ col3.metric(
 st.subheader("Financial Performance")
 
 
-# Create financial performance chart
+
+# Financial performance chart in USD billions
+chart_df = df[
+    ["Year", "Revenue", "Operating Income", "Net Income"]
+].copy()
+
+for metric in ["Revenue", "Operating Income", "Net Income"]:
+    chart_df[metric] = chart_df[metric] / 1000
+
 fig = px.line(
-    df,
+    chart_df,
     x="Year",
-    y=["Revenue", "Net Income"],
-    markers=True
+    y=["Revenue", "Operating Income", "Net Income"],
+    markers=True,
+    title=f"{company_name} — Financial Performance",
+    labels={
+        "Year": "Fiscal Year",
+        "value": "USD Billions",
+        "variable": "Financial Metric"
+    }
 )
+
+fig.update_xaxes(
+    tickmode="array",
+    tickvals=chart_df["Year"].tolist()
+)
+
+fig.update_traces(
+    hovertemplate="$%{y:,.2f}B<extra>%{fullData.name}</extra>"
+)
+
+fig.update_layout(
+    hovermode="x unified",
+    legend_title_text="Financial Metric"
+)
+
+st.plotly_chart(fig, width="stretch")
+
 
 # Display only whole fiscal years
 fig.update_xaxes(
     tickmode="array",
     tickvals=df["Year"].tolist()
 )
-
-# Display chart
-st.plotly_chart(fig, width="stretch")
-
 
 st.subheader("Financial Data")
 st.dataframe(df.round(2), hide_index=True)
@@ -169,3 +223,167 @@ if st.button("Generate AI Financial Report"):
                     "Status code:",
                     getattr(error, "code", "Unknown")
                 )
+
+# Company Comparison
+st.divider()
+st.subheader("Company Comparison")
+
+st.caption(
+    "Compare the latest available annual financial "
+    "results for two companies."
+)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    company_a = st.selectbox(
+        "First Company",
+        list(COMPANIES.keys()),
+        index=0,
+        key="company_a"
+    )
+
+with col2:
+    company_b = st.selectbox(
+        "Second Company",
+        list(COMPANIES.keys()),
+        index=1,
+        key="company_b"
+    )
+
+
+if "show_comparison" not in st.session_state:
+    st.session_state.show_comparison = False
+
+if st.button("Compare Companies"):
+    st.session_state.show_comparison = True
+
+if st.session_state.show_comparison:
+
+
+    if company_a == company_b:
+        st.warning("Please select two different companies.")
+
+    else:
+        try:
+            name_a, df_a, _ = load_data(company_a)
+            name_b, df_b, _ = load_data(company_b)
+
+            
+            # Find fiscal years available for both companies
+            common_years = sorted(
+                set(df_a["Year"]) & set(df_b["Year"]),
+                reverse=True
+            )
+
+            if not common_years:
+                st.warning(
+                    "These companies have no matching fiscal years."
+                )
+                st.stop()
+
+            comparison_year = st.selectbox(
+                "Select Comparison Fiscal Year",
+                common_years,
+                key="comparison_year"
+            )
+
+            a = df_a[
+                df_a["Year"] == comparison_year
+            ].iloc[0]
+
+            b = df_b[
+                df_b["Year"] == comparison_year
+            ].iloc[0]
+
+            comparison = pd.DataFrame({
+                
+                "Metric": [
+                    "Fiscal Year",
+                    "Period Start",
+                    "Period End",
+                    "Revenue ($B)",
+                    "Revenue Growth (%)",
+                    "Operating Margin (%)",
+                    "Net Margin (%)"
+                ],
+                name_a: [
+                    int(a["Year"]),
+                    a["Period Start"],
+                    a["Period End"],
+                    round(a["Revenue"] / 1000, 2),
+                    round(a["Revenue Growth (%)"], 2),
+                    round(a["Operating Margin (%)"], 2),
+                    round(a["Net Margin (%)"], 2)
+                ],
+                name_b: [
+                    int(b["Year"]),
+                    b["Period Start"],
+                    b["Period End"],
+                    round(b["Revenue"] / 1000, 2),
+                    round(b["Revenue Growth (%)"], 2),
+                    round(b["Operating Margin (%)"], 2),
+                    round(b["Net Margin (%)"], 2)
+                ]
+            })
+            st.dataframe(
+                comparison,
+                hide_index=True,
+                width="stretch"
+            )
+            if (
+                a["Period Start"] != b["Period Start"]
+                or a["Period End"] != b["Period End"]
+            ):
+                st.info(
+                    "These companies have different fiscal "
+                    "reporting periods. Comparisons should "
+                    "be interpreted with this difference in mind."
+                )
+
+            # Compare financial ratios visually
+            chart_data = pd.DataFrame({
+                "Metric": [
+                    "Revenue Growth",
+                    "Operating Margin",
+                    "Net Margin"
+                ],
+                name_a: [
+                    a["Revenue Growth (%)"],
+                    a["Operating Margin (%)"],
+                    a["Net Margin (%)"]
+                ],
+                name_b: [
+                    b["Revenue Growth (%)"],
+                    b["Operating Margin (%)"],
+                    b["Net Margin (%)"]
+                ]
+            })
+
+            chart_data = chart_data.melt(
+                id_vars="Metric",
+                var_name="Company",
+                value_name="Percentage"
+            )
+
+            comparison_fig = px.bar(
+                chart_data,
+                x="Metric",
+                y="Percentage",
+                color="Company",
+                barmode="group",
+                title="Financial Ratio Comparison",
+                labels={"Percentage": "Percentage (%)"}
+            )
+
+            st.plotly_chart(
+                comparison_fig,
+                width="stretch",
+                key="comparison_chart"
+            )
+            
+
+
+        except Exception as error:
+            st.error("Unable to compare companies.")
+            st.write(type(error).__name__)
