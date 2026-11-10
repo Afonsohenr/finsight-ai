@@ -1,0 +1,17 @@
+
+
+# Protect API keys and credentials
+.streamlit/secrets.toml
+.env
+.env.*
+
+# Ignore Python temporary files
+__pycache__/
+*.pyc
+
+# Ignore virtual environments
+.venv/
+venv/
+
+# Ignore operating system files
+.DS_Store
