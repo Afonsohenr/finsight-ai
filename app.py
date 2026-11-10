@@ -7,6 +7,8 @@ from financial_data import get_financial_data
 
 from financial_analysis import generate_financial_analysis
 
+from ai_analyst import generate_ai_report
+
 
 st.set_page_config(
     page_title="FinSight AI",
@@ -102,7 +104,8 @@ st.download_button(
 )
 
 st.caption(
-    "Demo data only. Real SEC financial statements coming soon."
+    "Financial data retrieved from SEC EDGAR. "
+    "AI-generated analysis is for educational purposes."
 )
 
 # Automated financial analysis
@@ -121,3 +124,48 @@ if st.button("Generate Financial Analysis"):
 
     for i, insight in enumerate(insights, start=1):
         st.write(f"**Insight {i}:** {insight}")
+
+
+# AI Financial Analyst
+st.divider()
+st.subheader("AI Financial Analyst")
+
+st.caption(
+    "AI-generated financial analysis using SEC-derived financial data."
+)
+
+if st.button("Generate AI Financial Report"):
+    api_key = st.secrets.get("GEMINI_API_KEY")
+
+    if not api_key:
+        st.error("Gemini API key is missing.")
+
+    else:
+        with st.spinner("AI is analyzing financial data..."):
+            try:
+                report = generate_ai_report(
+                    df,
+                    year,
+                    company_name,
+                    api_key
+                )
+
+                st.markdown(report)
+
+                st.download_button(
+                    "Download AI Report",
+                    data=report,
+                    file_name=f"finsight_ai_{year}.md",
+                    mime="text/markdown"
+                )
+
+            except Exception as error:
+                st.error("Unable to generate AI report.")
+                st.write(
+                    "Error type:",
+                    type(error).__name__
+                )
+                st.write(
+                    "Status code:",
+                    getattr(error, "code", "Unknown")
+                )

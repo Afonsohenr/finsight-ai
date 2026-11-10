@@ -1,4 +1,7 @@
 
+import time
+from google.genai import errors
+
 import json
 from google import genai
 
@@ -86,16 +89,37 @@ Rules:
 - Convert to billions when useful.
 - Explain the financial implications in clear language.
 - Keep the report under 450 words.
+- Do not attribute changes in financial performance to
+  specific causes unless the supplied data supports them.
+- Distinguish mathematical differences from explanations
+  of what caused those differences.
+- If prior-year data is available, explicitly calculate
+  and interpret year-over-year revenue and profit growth.
+
 """
 
     # Connect to Gemini
+
     client = genai.Client(api_key=api_key)
 
-    # Generate the financial report
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
+
+    # Retry temporary Gemini server errors
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.5-flash",
+                contents=prompt
+            )
+            break
+
+        except errors.ServerError as error:
+            if getattr(error, "code", None) not in (500, 502, 503, 504):
+                raise
+
+            if attempt == 2:
+                raise
+
+            time.sleep(2 ** (attempt + 1))
 
     if not response.text:
         raise ValueError("The AI returned an empty report.")
