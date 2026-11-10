@@ -3,6 +3,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+from financial_data import get_financial_data
+
+
 st.set_page_config(
     page_title="FinSight AI",
     page_icon="📊",
@@ -12,16 +15,28 @@ st.set_page_config(
 st.title("📊 FinSight AI")
 st.write("Your AI-powered financial analysis platform")
 
-# Sample financial data (USD millions)
-# These are NOT actual Microsoft figures.
-data = {
-    "Year": [2023, 2024, 2025],
-    "Revenue": [100000, 115000, 135000],
-    "Operating Income": [30000, 36000, 43000],
-    "Net Income": [25000, 29000, 35000]
-}
 
-df = pd.DataFrame(data)
+# Retrieve real SEC financial statements
+@st.cache_data(ttl=3600)
+def load_data():
+    return get_financial_data()
+
+
+try:
+    company_name, df, accession = load_data()
+
+except Exception as error:
+    st.error("Unable to retrieve SEC financial data.")
+    st.exception(error)
+    st.stop()
+
+st.success(f"Loaded real financial data for {company_name}")
+
+st.caption(
+    f"Source: SEC EDGAR | Filing: {accession} | "
+    "Financial amounts in USD millions"
+)
+
 
 df["Revenue Growth (%)"] = df["Revenue"].pct_change() * 100
 df["Operating Margin (%)"] = (
@@ -37,8 +52,17 @@ selected = df[df["Year"] == year].iloc[0]
 
 col1, col2, col3 = st.columns(3)
 
-col1.metric("Revenue", f"${selected['Revenue']:,.0f}M")
-col2.metric("Net Income", f"${selected['Net Income']:,.0f}M")
+
+col1.metric(
+    "Revenue",
+    f"${selected['Revenue']/1000:,.2f}B"
+)
+
+col2.metric(
+    "Net Income",
+    f"${selected['Net Income']/1000:,.2f}B"
+)
+
 col3.metric(
     "Operating Margin",
     f"{selected['Operating Margin (%)']:.2f}%"
@@ -46,12 +70,24 @@ col3.metric(
 
 st.subheader("Financial Performance")
 
+
+# Create financial performance chart
 fig = px.line(
     df,
     x="Year",
     y=["Revenue", "Net Income"],
     markers=True
 )
+
+# Display only whole fiscal years
+fig.update_xaxes(
+    tickmode="array",
+    tickvals=df["Year"].tolist()
+)
+
+# Display chart
+st.plotly_chart(fig, width="stretch")
+
 
 st.plotly_chart(fig, width="stretch")
 
